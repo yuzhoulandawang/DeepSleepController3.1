@@ -1,7 +1,6 @@
 package com.example.deepsleep.ui.logs
 
 import android.content.Context
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.deepsleep.data.LogRepository
@@ -9,8 +8,8 @@ import com.example.deepsleep.model.LogEntry
 import com.example.deepsleep.model.LogLevel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -19,10 +18,10 @@ class LogsViewModel : ViewModel() {
     private val repository = LogRepository
 
     private val _logs = MutableStateFlow<List<LogEntry>>(emptyList())
-    val logs: StateFlow<List<LogEntry>> = _logs.asStateFlow()
+    val logs: StateFlow<List<LogEntry>> = _logs
     
     private val _selectedLevel = MutableStateFlow<LogLevel?>(null)
-    val selectedLevel: StateFlow<LogLevel?> = _selectedLevel.asStateFlow()
+    val selectedLevel: StateFlow<LogLevel?> = _selectedLevel
     
     val filteredLogs: StateFlow<List<LogEntry>> = combine(
         _logs,
@@ -33,7 +32,7 @@ class LogsViewModel : ViewModel() {
         } else {
             logs.filter { it.level == level }
         }
-    }.asStateFlow()
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     init {
         refreshLogs()
