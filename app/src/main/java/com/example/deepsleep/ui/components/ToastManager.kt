@@ -18,11 +18,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import kotlinx.coroutines.*
 
-/**
+/** 
  * Toast 消息类型
  */
 enum class ToastType {
@@ -45,7 +46,7 @@ data class ToastMessage(
     val actionText: String? = null
 )
 
-/**
+/** 
  * 全局 Toast 管理器
  */
 class ToastManager {
@@ -74,7 +75,7 @@ class ToastManager {
         )
     }
     
-    /**
+    /** 
      * 显示错误提示
      */
     fun showError(
@@ -118,7 +119,7 @@ class ToastManager {
         )
     }
     
-    /**
+    /** 
      * 显示信息提示
      */
     fun showInfo(
@@ -153,7 +154,7 @@ class ToastManager {
         }
     }
     
-    /**
+    /** 
      * 移除指定 Toast
      */
     fun dismiss(id: String) {
@@ -168,7 +169,7 @@ class ToastManager {
     }
 }
 
-/**
+/** 
  * Toast 组件
  */
 @Composable
@@ -253,7 +254,7 @@ fun AnimatedToast(
     }
 }
 
-/**
+/** 
  * Toast 卡片
  */
 @Composable
@@ -373,7 +374,7 @@ fun ToastCard(
  */
 val GlobalToastManager = ToastManager()
 
-/**
+/** 
  * 快捷显示成功提示
  */
 fun showSuccessToast(
@@ -399,7 +400,7 @@ fun showErrorToast(
     GlobalToastManager.showError(title, message, duration, action, actionText)
 }
 
-/**
+/** 
  * 快捷显示警告提示
  */
 fun showWarningToast(
@@ -425,7 +426,7 @@ fun showInfoToast(
     GlobalToastManager.showInfo(title, message, duration, action, actionText)
 }
 
-/**
+/** 
  * Snackbar 提示组件（用于更持久的操作反馈）
  * 注意：此组件使用了 androidx.compose.material3.SnackbarHost 的名称
  * 如果需要使用，请在调用时使用完全限定名
@@ -441,15 +442,14 @@ fun DeepSleepSnackbarHost(
         snackbar = { snackbarData ->
             Snackbar(
                 snackbarData = snackbarData,
-                shape = RoundedCornerShape(8.dp),
-                action = {
-                    snackbarData.visuals.actionLabel?.let { actionLabel ->
-                        TextButton(onClick = snackbarData::performAction) {
-                            Text(actionLabel)
-                        }
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                snackbarData.visuals.actionLabel?.let { actionLabel ->
+                    TextButton(onClick = snackbarData::performAction) {
+                        Text(actionLabel)
                     }
                 }
-            )
+            }
         }
     )
 }
@@ -500,7 +500,7 @@ fun ConfirmDialog(
     )
 }
 
-/**
+/** 
  * 加载进度对话框
  */
 @Composable
@@ -574,7 +574,7 @@ fun ProgressIndicator(
     }
 }
 
-/**
+/** 
  * 状态指示器组件
  */
 @Composable
