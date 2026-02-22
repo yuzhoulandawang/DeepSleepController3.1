@@ -8,9 +8,12 @@ import com.example.deepsleep.data.SettingsRepository
 import com.example.deepsleep.data.StatsRepository
 import com.example.deepsleep.model.AppSettings
 import com.example.deepsleep.root.RootCommander
+import com.example.deepsleep.root.DozeController
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -59,20 +62,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _hasRoot.value = hasRootAccess
                 
                 if (hasRootAccess) {
-                    logRepository.info("Root 权限已验证")
+                    logRepository.info("Root权限", "Root 权限已验证")
                 } else {
-                    logRepository.error("Root 权限未获取，请手动授权")
+                    logRepository.error("Root权限", "Root 权限未获取，请手动授权")
                 }
             } catch (e: Exception) {
                 _hasRoot.value = false
-                logRepository.error("Root 权限检查失败: ${e.message}")
+                logRepository.error("Root权限", "Root 权限检查失败: ${e.message}")
             } finally {
                 _isCheckingRoot.value = false
             }
         }
     }
     
-    /**
+    /** 
      * 获取详细的 Root 权限信息
      */
     suspend fun getRootInfo() = RootCommander.getRootInfo()
@@ -487,13 +490,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val hasRoot = RootCommander.requestRootAccess()
                 _hasRoot.value = hasRoot
                 if (hasRoot) {
-                    logRepository.info("Root 权限获取成功")
+                    logRepository.info("Root权限", "Root 权限获取成功")
                 } else {
-                    logRepository.error("Root 权限获取失败")
+                    logRepository.error("Root权限", "Root 权限获取失败")
                 }
             } catch (e: Exception) {
                 _hasRoot.value = false
-                logRepository.error("请求 Root 权限异常: ${e.message}")
+                logRepository.error("Root权限", "请求 Root 权限异常: ${e.message}")
             } finally {
                 _isCheckingRoot.value = false
             }
@@ -503,10 +506,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun forceDoze() {
         viewModelScope.launch {
             try {
-                logRepository.info("强制进入 Doze 模式")
+                logRepository.info("Root权限", "强制进入 Doze 模式")
                 DozeController.enterDeepSleep()
             } catch (e: Exception) {
-                logRepository.error("强制 Doze 失败: ${e.message}")
+                logRepository.error("Root权限", "强制 Doze 失败: ${e.message}")
             }
         }
     }
