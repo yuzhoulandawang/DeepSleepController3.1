@@ -67,10 +67,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         composable("main") {
                             MainScreen(
-                                viewModel = viewModel,
-                                onNavigateToLogs = { navController.navigate("logs") },
-                                onNavigateToWhitelist = { navController.navigate("whitelist") },
-                                onNavigateToCpuParams = { navController.navigate("cpuParams") }
+                                viewModel = viewModel
                             )
                         }
                         composable("logs") {
