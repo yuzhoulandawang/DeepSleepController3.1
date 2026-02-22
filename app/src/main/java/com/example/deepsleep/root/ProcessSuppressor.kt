@@ -33,8 +33,10 @@ object ProcessSuppressor {
                 commands.add("echo $oomValue > /proc/$pidNum/oom_score_adj 2>/dev/null || true")
             }
             
-            commands.chunked(100).forEach { batch ->
-                RootCommander.execBatch(batch)
+            if (commands.isNotEmpty()) {
+                commands.chunked(100).forEach { batch ->
+                    RootCommander.execBatch(batch)
+                }
             }
             
             Logger.i(TAG, "已压制 ${commands.size} 个进程")
@@ -43,7 +45,7 @@ object ProcessSuppressor {
         }
     }
     
-    /**
+    /** 
      * 检查进程是否在白名单中
      */
     private fun isWhitelisted(cmdline: String, whitelist: List<String>): Boolean {
