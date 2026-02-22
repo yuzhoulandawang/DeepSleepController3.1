@@ -1,5 +1,6 @@
 package com.example.deepsleep.ui.logs
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -104,7 +105,7 @@ fun LevelFilter(
             .horizontalScroll(rememberScrollState())
             .padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
-    {
+    ) {
         // 全部
         FilterChip(
             selected = selectedLevel == null,
