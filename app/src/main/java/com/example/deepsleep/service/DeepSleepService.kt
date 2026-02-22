@@ -99,7 +99,7 @@ class DeepSleepService : Service() {
                 return START_STICKY
             }
             ACTION_STOP -> {
-                stopServiceInternal()
+                终止ServiceInternal()
                 return START_NOT_STICKY
             }
         }
@@ -305,11 +305,13 @@ class DeepSleepService : Service() {
     }
     
     private fun applyCpuMode(mode: String) {
-        when (mode) {
-            "daily" -> WaltOptimizer.applyDaily()
-            "standby" -> WaltOptimizer.applyStandby()
-            "default" -> WaltOptimizer.applyDefault()
-            "performance" -> WaltOptimizer.applyPerformance()
+        serviceScope.launch {
+            when (mode) {
+                "daily" -> WaltOptimizer.applyDaily()
+                "standby" -> WaltOptimizer.applyStandby()
+                "default" -> WaltOptimizer.applyDefault()
+                "performance" -> WaltOptimizer.applyPerformance()
+            }
         }
     }
     
@@ -346,7 +348,7 @@ class DeepSleepService : Service() {
         return if (powerManager.isInteractive) ScreenState.ON else ScreenState.OFF
     }
     
-    private fun stopServiceInternal() {
+    private fun 终止ServiceInternal() {
         isRunning = false
         monitorJob?.cancel()
         suppressJob?.cancel()
@@ -364,8 +366,8 @@ class DeepSleepService : Service() {
             WaltOptimizer.restoreDefault()
             log("WALT 参数已恢复")
             
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            终止Foreground(STOP_FOREGROUND_REMOVE)
+            终止Self()
         }
     }
     
@@ -399,26 +401,28 @@ class DeepSleepService : Service() {
     }
     
     private fun updateNotificationStatus(screen: ScreenState, doze: DozeState) {
-        val screenText = if (screen == ScreenState.ON) "亮屏" else "息屏"
-        val dozeText = when (doze) {
-            DozeState.IDLE -> "深度睡眠"
-            DozeState.IDLE_MAINTENANCE -> "维护窗口"
-            DozeState.ACTIVE -> "活跃"
-            else -> "其他"
+        serviceScope.launch {
+            val screenText = if (screen == ScreenState.ON) "亮屏" else "息屏"
+            val dozeText = when (doze) {
+                DozeState.IDLE -> "深度睡眠"
+                DozeState.IDLE_MAINTENANCE -> "维护窗口"
+                DozeState.ACTIVE -> "活跃"
+                else -> "其他"
+            }
+            
+            val settings = settingsRepo.getSettings()
+            val cpuModeText = if (settings.cpuOptimizationEnabled) {
+                " | ${getCpuModeName(settings.cpuModeOnScreen)}"
+            } else {
+                ""
+            }
+            
+            val status = "$screenText | $dozeText$cpuModeText${if (forceModeActive) " [强制]" else ""}"
+            val notification = createNotification(status)
+            
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.notify(NOTIFICATION_ID, notification)
         }
-        
-        val settings = settingsRepo.getSettings()
-        val cpuModeText = if (settings.cpuOptimizationEnabled) {
-            " | ${getCpuModeName(settings.cpuModeOnScreen)}"
-        } else {
-            ""
-        }
-        
-        val status = "$screenText | $dozeText$cpuModeText${if (forceModeActive) " [强制]" else ""}"
-        val notification = createNotification(status)
-        
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, notification)
     }
     
     override fun onBind(intent: Intent?): IBinder? = null
@@ -426,6 +430,7 @@ class DeepSleepService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         unregisterReceiver(screenReceiver)
-        serviceScope.cancel()
+        monitorJob?.cancel()
+        suppressJob?.cancel()
     }
 }
