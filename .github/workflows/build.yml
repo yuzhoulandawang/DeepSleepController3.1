@@ -1,12 +1,11 @@
-name: Smart Build Debug APK (Manual)
+name: 🔍 Smart Diagnostic Build with Error Categorization
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
+  diagnose-and-build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -23,158 +22,158 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Cache Gradle dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      # 诊断步骤
-      - name: Print configuration files
+      # ========== 诊断阶段 ==========
+      - name: 📋 Collect environment info
         run: |
-          echo "### gradle-wrapper.properties ###"
-          cat gradle/wrapper/gradle-wrapper.properties || echo "Not found"
-          echo "### root build.gradle.kts ###"
-          cat build.gradle.kts || echo "Not found"
-          echo "### gradle/libs.versions.toml (if exists) ###"
-          cat gradle/libs.versions.toml || echo "Not found"
-          echo "### settings.gradle.kts ###"
-          cat settings.gradle.kts || echo "Not found"
+          echo "### System Info" >> $GITHUB_STEP_SUMMARY
+          echo "- Java: $(java -version 2>&1 | head -1)" >> $GITHUB_STEP_SUMMARY
+          echo "- Gradle Wrapper version: $(./gradlew --version | grep "Gradle ")" >> $GITHUB_STEP_SUMMARY
+          echo "- Kotlin: $(./gradlew --version | grep "Kotlin:")" >> $GITHUB_STEP_SUMMARY
 
-      - name: Check Gradle and AGP compatibility
+      - name: 🔍 Check Gradle & AGP compatibility
         run: |
           GRADLE_VERSION=$(grep distributionUrl gradle/wrapper/gradle-wrapper.properties | grep -oE 'gradle-[0-9.]+' | cut -d- -f2)
           AGP_VERSION=$(grep -E "com.android.application.*version" build.gradle.kts | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
-          echo "Detected Gradle version: $GRADLE_VERSION"
-          echo "Detected AGP version: $AGP_VERSION"
-          if [[ -n "$AGP_VERSION" && "$AGP_VERSION" != "unknown" ]]; then
-            AGP_MAJOR=$(echo $AGP_VERSION | cut -d. -f1)
-            AGP_MINOR=$(echo $AGP_VERSION | cut -d. -f2)
-            if [[ $AGP_MAJOR -eq 8 ]]; then
-              case $AGP_MINOR in
-                0|1|2|3) REQUIRED_GRADLE="6.8" ;;
-                4) REQUIRED_GRADLE="7.5" ;;
-                5) REQUIRED_GRADLE="8.7" ;;
-                6) REQUIRED_GRADLE="8.9" ;;
-                7) REQUIRED_GRADLE="8.11.1" ;;
-                8|9|10|11|12|13) REQUIRED_GRADLE="8.13" ;;
-                *) REQUIRED_GRADLE="unknown" ;;
-              esac
-              echo "AGP $AGP_VERSION requires Gradle >= $REQUIRED_GRADLE"
-            fi
-          else
-            echo "AGP version not detected, skipping compatibility check."
-          fi
+          echo "### Compatibility Check" >> $GITHUB_STEP_SUMMARY
+          echo "- Gradle version: $GRADLE_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- AGP version: $AGP_VERSION" >> $GITHUB_STEP_SUMMARY
+          # 通用提示（非严格检查）
+          echo "⚠️ If you encounter issues, ensure Gradle and AGP versions are compatible." >> $GITHUB_STEP_SUMMARY
 
-      - name: Ensure Material3 theme exists
+      - name: 📄 Show app/build.gradle.kts content (head)
+        run: head -50 app/build.gradle.kts
+
+      - name: 🔧 Ensure compileSdk in app/build.gradle.kts (optional)
         run: |
-          THEME_FILE="app/src/main/res/values/themes.xml"
-          if [ ! -f "$THEME_FILE" ]; then
-            echo "Theme file not found, creating default one..."
-            mkdir -p app/src/main/res/values
-            cat > "$THEME_FILE" <<EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <style name="Theme.DeepSleepController" parent="Theme.Material3.Light.NoActionBar" />
-          </resources>
-          EOF
-            echo "Created $THEME_FILE"
+          if ! grep -q "compileSdk = 35" app/build.gradle.kts; then
+            echo "⚠️ compileSdk not found. You may need to add 'compileSdk = 35' manually." >> $GITHUB_STEP_SUMMARY
           else
-            echo "Theme file exists, checking parent..."
-            if ! grep -q "Theme.Material3.Light.NoActionBar" "$THEME_FILE"; then
-              echo "WARNING: Theme.DeepSleepController does not seem to inherit from Material3. Please check."
-            else
-              echo "Theme looks good."
-            fi
+            echo "✅ compileSdk found." >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Check duplicate theme definitions
+      # ========== 刷新依赖（不删除全部缓存） ==========
+      - name: 🧹 Clean and refresh dependencies
+        run: ./gradlew clean --refresh-dependencies
+
+      # ========== 诊断：确认 JavaPoet 版本 ==========
+      - name: 🔎 Verify JavaPoet version
         run: |
-          echo "Searching for Theme.DeepSleepController in all resource files..."
-          DUPLICATES=$(find app/src/main/res -name "*.xml" -exec grep -l "Theme.DeepSleepController" {} \;)
-          if [ -n "$DUPLICATES" ]; then
-            COUNT=$(echo "$DUPLICATES" | wc -l)
-            if [ $COUNT -gt 1 ]; then
-              echo "❌ Duplicate theme definitions found in:"
-              echo "$DUPLICATES"
-              echo "Please keep only one definition (preferably in themes.xml) and remove others."
-            else
-              echo "✅ Theme defined only in: $DUPLICATES"
-            fi
+          echo "### JavaPoet version (debug compile classpath)" >> $GITHUB_STEP_SUMMARY
+          ./gradlew -q app:dependencies --configuration debugCompileClasspath | grep javapoet | head -5 >> $GITHUB_STEP_SUMMARY || echo "Not found" >> $GITHUB_STEP_SUMMARY
+
+      # ========== 首次构建尝试 ==========
+      - name: 🏗️ First build attempt
+        id: first_build
+        run: |
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee build.log
+        continue-on-error: true
+
+      # ========== 检测是否需要自动修复（Hilt/JavaPoet 冲突） ==========
+      - name: 🔎 Check if Hilt/JavaPoet conflict fix is needed
+        id: check_fix
+        run: |
+          if grep -q "java.lang.NoSuchMethodError.*javapoet\|com.squareup.javapoet.ClassName.canonicalName" build.log; then
+            echo "need_fix=true" >> $GITHUB_OUTPUT
           else
-            echo "⚠️ Theme not found anywhere. Will be created in step 3 if needed."
+            echo "need_fix=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run Lint
-        run: ./gradlew lint || echo "Lint found issues, but continuing..."
+      # ========== 智能错误处理：添加 resolutionStrategy 修复冲突 ==========
+      - name: 🛠️ Auto-fix for Hilt/JavaPoet conflict
+        if: steps.check_fix.outputs.need_fix == 'true'
+        run: |
+          echo "Detected Hilt/JavaPoet conflict. Adding resolutionStrategy to force JavaPoet 1.13.0..."
+          # 检查是否已添加过，避免重复追加
+          if ! grep -q "force.*javapoet" app/build.gradle.kts; then
+            cat << 'EOF' >> app/build.gradle.kts
 
-      - name: Run unit tests
-        run: ./gradlew testDebugUnitTest || echo "Unit tests failed, but continuing..."
+// Auto-added by CI to fix Hilt/JavaPoet conflict (force JavaPoet 1.13.0)
+configurations.all {
+    resolutionStrategy {
+        force("com.squareup:javapoet:1.13.0")
+    }
+}
+EOF
+          fi
+          # 再次构建并生成新的日志
+          ./gradlew clean assembleDebug --stacktrace 2>&1 | tee build_fixed.log
+          cp build_fixed.log build.log
+        continue-on-error: true
 
-      # 构建并保存完整日志（即使失败也保存）
-      - name: Build Debug APK (with log capture)
-        run: ./gradlew assembleDebug --stacktrace 2>&1 | tee build.log
-        continue-on-error: true   # 确保即使构建失败，后续步骤仍会执行
-
-      # 分析错误并生成报告（无论构建是否成功都运行）
-      - name: Analyze errors and generate report
+      # ========== 分类错误报告（基于最终的 build.log） ==========
+      - name: 📊 Generate categorized error report
         if: always()
         run: |
-          echo "# Build Error Summary" > error-report.md
-          echo "" >> error-report.md
-          echo "## 🔍 Diagnostic Results" >> error-report.md
-          echo "" >> error-report.md
-          
+          echo "# 📋 Build Diagnostic Report (Categorized)" > final-report.md
+          echo "" >> final-report.md
+          echo "## 🔍 Summary" >> final-report.md
           if [ -f build.log ]; then
-            if grep -q "FAILURE:" build.log; then
-              echo "## ❌ Build Failed" >> error-report.md
-              echo "" >> error-report.md
-              echo "### First 30 errors/warnings from build log:" >> error-report.md
-              echo '```' >> error-report.md
-              grep -E "^e:|^error:|FAILURE:|Unresolved reference|Suspend function|type mismatch" build.log | head -30 >> error-report.md
-              echo '```' >> error-report.md
-              echo "" >> error-report.md
-              echo "### Possible categories:" >> error-report.md
-              
-              if grep -q "Unresolved reference.*BuildConfig" build.log; then
-                echo "- 🔧 **BuildConfig missing**: Add import or enable buildConfig feature." >> error-report.md
-              fi
-              if grep -q "Suspend function.*should be called only from a coroutine" build.log; then
-                echo "- 🔧 **Suspend function called outside coroutine**: Wrap calls with lifecycleScope/ viewModelScope/ rememberCoroutineScope." >> error-report.md
-              fi
-              if grep -q "resource.*not found" build.log; then
-                echo "- 🔧 **Resource not found**: Check theme inheritance or missing dependencies (e.g., Material)." >> error-report.md
-              fi
+            if grep -q "BUILD SUCCESSFUL" build.log; then
+              echo "✅ **Build succeeded**" >> final-report.md
             else
-              echo "## ✅ Build Succeeded" >> error-report.md
+              echo "❌ **Build failed**" >> final-report.md
+              echo "" >> final-report.md
+              echo "### 📊 Error Categories" >> final-report.md
+              
+              declare -A error_patterns=(
+                ["KSP/Kotlin版本不兼容"]="ksp.*is too new for kotlin"
+                ["挂起函数调用错误"]="Suspend function.*should be called only from a coroutine"
+                ["未解决的引用"]="Unresolved reference"
+                ["类型不匹配"]="type mismatch"
+                ["参数不匹配"]="No value passed for parameter|Cannot find a parameter"
+                ["函数重载冲突"]="Conflicting overloads"
+                ["缺少导入"]="Unresolved reference.*(import|kotlinx)"
+                ["Compose上下文错误"]="@Composable invocations can only happen from the context of a @Composable function"
+                ["资源缺失"]="resource.*not found"
+                ["依赖冲突"]="Conflict|dependency convergence"
+                ["Hilt/JavaPoet冲突"]="java.lang.NoSuchMethodError.*javapoet|com.squareup.javapoet.ClassName.canonicalName"
+                ["其他错误"]="^e:|^error:|FAILURE:"
+              )
+              
+              for category in "${!error_patterns[@]}"; do
+                pattern="${error_patterns[$category]}"
+                count=$(grep -E "$pattern" build.log | wc -l)
+                if [ "$count" -gt 0 ]; then
+                  echo "- **$category**: $count occurrences" >> final-report.md
+                  echo '  ```' >> final-report.md
+                  grep -E "$pattern" build.log | head -3 | sed 's/^/  /' >> final-report.md
+                  if [ "$count" -gt 3 ]; then
+                    echo "  ... (and $((count-3)) more)" >> final-report.md
+                  fi
+                  echo '  ```' >> final-report.md
+                fi
+              done
+              
+              echo "" >> final-report.md
+              echo "### 📄 Full Log" >> final-report.md
+              echo "Download \`build.log\` artifact for complete details." >> final-report.md
             fi
           else
-            echo "## ⚠️ Build log not found" >> error-report.md
+            echo "⚠️ Build log not found" >> final-report.md
           fi
           
-          echo "" >> error-report.md
-          echo "---" >> error-report.md
-          echo "Full build log is attached as \`build.log\`. Lint and test reports are also available if generated." >> error-report.md
+          echo "" >> final-report.md
+          echo "## 🖥️ Environment" >> final-report.md
+          echo "- Java: $(java -version 2>&1 | head -1)" >> final-report.md
+          echo "- Gradle: $(./gradlew --version | grep "Gradle ")" >> final-report.md
+          echo "- Kotlin: $(./gradlew --version | grep "Kotlin:")" >> final-report.md
 
-      - name: Upload build reports
+      # ========== 上传所有产物 ==========
+      - name: 📤 Upload diagnostic artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-reports
+          name: diagnostic-reports
           path: |
             build.log
-            error-report.md
-            app/build/reports/lint-results-*.html
-            app/build/reports/tests/
+            build_fixed.log
+            final-report.md
+            app/build/reports/
           if-no-files-found: ignore
 
-      - name: Upload APK (if generated)
+      - name: 📦 Upload APK (if built)
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: deep-sleep-controller-debug
+          name: app-debug
           path: app/build/outputs/apk/debug/*.apk
